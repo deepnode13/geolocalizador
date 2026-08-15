@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geolocalizador Campo</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <style>
+    :root {
+      --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
+      --primary: #3b82f6; --success: #22c55e; --danger: #ef4444;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg); color: var(--text);
+      margin: 0; padding: 1rem; display: flex; flex-direction: column; align-items: center;
+    }
+    .container { width: 100%; max-width: 420px; }
+    .card { background: var(--card); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; border: 1px solid #334155; }
+    h2 { margin-top: 0; font-size: 1.2rem; color: #94a3b8; }
+    .btn {
+      width: 100%; padding: 0.85rem; border: none; border-radius: 8px; font-weight: bold;
+      font-size: 1rem; cursor: pointer; background: var(--primary); color: white; margin-top: 0.5rem;
+    }
+    .btn-success { background: var(--success); }
+    .status-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+    .online { background: #166534; color: #4ade80; }
+    .offline { background: #991b1b; color: #fca5a5; }
+    #previewImg { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-top: 0.5rem; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+      <h1 style="font-size: 1.4rem; margin:0;">Geolocalizador</h1>
+      <span id="netStatus" class="status-badge online">ONLINE</span>
+    </div>
+
+    <!-- Fotografía -->
+    <div class="card">
+      <h2>1. Fotografía de Campo</h2>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+      <button class="btn" onclick="document.getElementById('cameraInput').click()">📷 Tomar Foto</button>
+      <img id="previewImg" alt="Vista previa">
+    </div>
+
+    <!-- GPS -->
+    <div class="card">
+      <h2>2. Coordenadas GPS</h2>
+      <div id="gpsStatus" style="font-size:0.9rem; color:#94a3b8;">Obteniendo ubicación...</div>
+    </div>
+
+    <!-- Enviar / Guardar -->
+    <button class="btn btn-success" id="btnSave" onclick="guardarRegistro()">💾 Registrar Ubicación</button>
+    
+    <div id="pendingCount" style="text-align:center; margin-top:1rem; font-size:0.85rem; color:#94a3b8;">
+      Pendientes de envío local: <b id="offlineCount">0</b>
+    </div>
+  </div>
+
+  <script>
+    // CONFIGURACIÓN: Reemplaza con la URL de tu Webhook de n8n o Apps Script
+    const URL_BACKEND = "AQUI_TU_WEBHOOK_N8N_O_APPS_SCRIPT";
+
+    let fotoBase64 = "";
+    let coordsActuales = null;
+    let db;
+
+    // Registrar Service Worker para PWA / Carga Offline
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log("Service Worker Activo"))
+        .catch(err => console.error("Error SW:", err));
+    }
+
+    // Inicializar IndexedDB para guardado local
+    const request = indexedDB.open("GeolocalizadorDB", 1);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      db.createObjectStore("registros", { keyPath: "id" });
+    };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      actualizarContadorOffline();
+    };
+
+    // Control de Estado de Red
+    function updateOnlineStatus() {
+      const netStatus = document.getElementById('netStatus');
+      if (navigator.onLine) {
+        netStatus.textContent = "ONLINE";
+        netStatus.className = "status-badge online";
+        sincronizarPendientes();
+      } else {
+        netStatus.textContent = "OFFLINE";
+        netStatus.className = "status-badge offline";
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // Captura de Foto en Base64
+    document.getElementById('cameraInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        fotoBase64 = evt.target.result;
+        const img = document.getElementById('previewImg');
+        img.src = fotoBase64;
+        img.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Obtener GPS continuo
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          coordsActuales = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            precision: pos.coords.accuracy
+          };
+          document.getElementById('gpsStatus').innerHTML = `
+            Lat: ${coordsActuales.lat.toFixed(5)}<br>
+            Lng: ${coordsActuales.lng.toFixed(5)}<br>
+            Precisión: ±${coordsActuales.precision.toFixed(1)}m
+          `;
+        },
+        (err) => {
+          document.getElementById('gpsStatus').textContent = "Error al obtener GPS: " + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    // Guardar Registro
+    function guardarRegistro() {
+      if (!coordsActuales) {
+        alert("Aún no se ha obtenido la ubicación GPS.");
+        return;
+      }
+
+      const ahora = new Date();
+      const timestampLocal = ahora.getFullYear() + '-' +
+        String(ahora.getMonth() + 1).padStart(2, '0') + '-' +
+        String(ahora.getDate()).padStart(2, '0') + ' ' +
+        String(ahora.getHours()).padStart(2, '0') + ':' +
+        String(ahora.getMinutes()).padStart(2, '0') + ':' +
+        String(ahora.getSeconds()).padStart(2, '0');
+
+      const nuevoRegistro = {
+        id: 'REG-' + Date.now(),
+        timestamp_captura: timestampLocal,
+        latitud: coordsActuales.lat,
+        longitud: coordsActuales.lng,
+        precision_m: coordsActuales.precision,
+        foto_base64: fotoBase64
+      };
+
+      if (navigator.onLine && URL_BACKEND !== "AQUI_TU_WEBHOOK_N8N_O_APPS_SCRIPT") {
+        enviarAlServidor(nuevoRegistro);
+      } else {
+        guardarEnIndexedDB(nuevoRegistro);
+      }
+    }
+
+    function guardarEnIndexedDB(registro) {
+      const tx = db.transaction(["registros"], "readwrite");
+      tx.objectStore("registros").add(registro);
+      tx.oncomplete = () => {
+        alert("Registro guardado en el teléfono (Offline)");
+        limpiarFormulario();
+        actualizarContadorOffline();
+      };
+    }
+
+    function enviarAlServidor(registro) {
+      fetch(URL_BACKEND, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registro)
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert("¡Registro enviado con éxito!");
+        limpiarFormulario();
+      })
+      .catch(() => {
+        // Si falla el envío aunque decía online, guardar en IndexedDB
+        guardarEnIndexedDB(registro);
+      });
+    }
+
+    function limpiarFormulario() {
+      fotoBase64 = "";
+      document.getElementById('previewImg').style.display = 'none';
+      document.getElementById('cameraInput').value = "";
+    }
+
+    function actualizarContadorOffline() {
+      if (!db) return;
+      const tx = db.transaction(["registros"], "readonly");
+      const store = tx.objectStore("registros");
+      const countReq = store.count();
+      countReq.onsuccess = () => {
+        document.getElementById('offlineCount').textContent = countReq.result;
+      };
+    }
+
+    function sincronizarPendientes() {
+      if (!db) return;
+      const tx = db.transaction(["registros"], "readonly");
+      const store = tx.objectStore("registros");
+      const getAllReq = store.getAll();
+
+      getAllReq.onsuccess = () => {
+        const pendientes = getAllReq.result;
+        if (pendientes.length === 0) return;
+
+        pendientes.forEach(reg => {
+          fetch(URL_BACKEND, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reg)
+          }).then(res => {
+            if (res.ok) {
+              const delTx = db.transaction(["registros"], "readwrite");
+              delTx.objectStore("registros").delete(reg.id);
+              delTx.oncomplete = () => actualizarContadorOffline();
+            }
+          });
+        });
+      };
+    }
+  </script>
+</body>
+</html>
