@@ -36,7 +36,7 @@
     }
     .login-box {
       background: var(--card); border: 2px solid var(--accent);
-      border-radius: 8px; padding: 2rem; width: 340px;
+      border-radius: 8px; padding: 2rem; width: 340px; max-width: 90%;
       box-shadow: 0 0 25px rgba(0, 255, 102, 0.3); text-align: center;
     }
     .login-box h2 { font-size: 1.2rem; margin-top: 0; text-shadow: 0 0 10px var(--accent); }
@@ -61,8 +61,8 @@
       padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center;
       box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
     }
-    h1 { margin: 0; font-size: 1.2rem; letter-spacing: 2px; text-shadow: 0 0 8px var(--accent); }
-    .status-panel { font-size: 0.8rem; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+    h1 { margin: 0; font-size: 1.1rem; letter-spacing: 1px; text-shadow: 0 0 8px var(--accent); }
+    .status-panel { font-size: 0.8rem; color: var(--accent); display: flex; align-items: center; gap: 8px; }
     
     .main-container { display: flex; flex: 1; height: calc(100vh - 60px); overflow: hidden; }
     
@@ -81,7 +81,7 @@
     .record-card:hover, .record-card.active {
       background: rgba(0, 255, 102, 0.15); border-left: 4px solid var(--accent);
     }
-    .record-id { font-weight: bold; color: var(--accent); font-size: 0.9rem; }
+    .record-id { font-weight: bold; color: var(--accent); font-size: 0.9rem; word-break: break-all; }
     .record-time { font-size: 0.75rem; color: var(--text-muted); }
     .record-coords { font-size: 0.8rem; margin-top: 4px; color: #aaffdd; }
 
@@ -102,8 +102,8 @@
     }
     .btn-refresh {
       background: transparent; border: 1px solid var(--accent);
-      color: var(--accent); padding: 4px 10px; cursor: pointer;
-      font-family: inherit; font-size: 0.8rem; transition: 0.2s;
+      color: var(--accent); padding: 4px 8px; cursor: pointer;
+      font-family: inherit; font-size: 0.75rem; transition: 0.2s; border-radius: 4px;
     }
     .btn-refresh:hover { background: var(--accent); color: var(--bg); }
 
@@ -112,12 +112,41 @@
       border: 1px solid var(--accent) !important; font-family: 'Courier New', Courier, monospace !important;
     }
 
+    /* Reglas para Celular / Pantallas Pequeñas */
     @media (max-width: 768px) {
-      .main-container { flex-direction: column-reverse; }
-      .sidebar { width: 100%; height: 40%; }
-      .content-area { height: 60%; }
-      .photo-panel { width: 220px; top: 5px; right: 5px; }
-      .photo-panel img { height: 120px; }
+      body { height: 100dvh; }
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 0.6rem 1rem;
+      }
+      .status-panel {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .main-container {
+        flex-direction: column-reverse;
+        height: auto;
+        flex: 1;
+      }
+      .sidebar {
+        width: 100%;
+        height: 40vh;
+      }
+      .content-area {
+        width: 100%;
+        height: 60vh;
+      }
+      .photo-panel {
+        width: calc(100% - 20px);
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+      .photo-panel img {
+        height: 150px;
+      }
     }
   </style>
 </head>
@@ -136,18 +165,20 @@
   </div>
 
   <header>
-    <h1>[SYS://GEO_TRACKER_V1]</h1>
+    <h1>[SYS://GEO_TRACKER]</h1>
     <div class="status-panel">
-      STATUS: <span id="sysStatus">BLOQUEADO</span>
-      <button class="btn-refresh" onclick="cargarDatos()">↻ REFRESH</button>
-      <button class="btn-refresh" onclick="cerrarSesion()" style="border-color:var(--danger); color:var(--danger);">[LOGOUT]</button>
+      <span>STATUS: <b id="sysStatus">BLOQUEADO</b></span>
+      <div>
+        <button class="btn-refresh" onclick="cargarDatos()">↻ REFRESH</button>
+        <button class="btn-refresh" onclick="cerrarSesion()" style="border-color:var(--danger); color:var(--danger);">[LOGOUT]</button>
+      </div>
     </div>
   </header>
 
   <div class="main-container">
     <div class="sidebar">
       <div class="sidebar-header">
-        <span>REGISTROS EN BASE DE DATOS</span>
+        <span>REGISTROS</span>
         <b id="totalCount" style="color:var(--accent);">0</b>
       </div>
       <div id="recordsList"></div>
@@ -190,9 +221,9 @@
       googleCyber.addTo(map);
 
       L.control.layers({
-        "Google Cyber (Dark)": googleCyber,
-        "Google Satélite": googleSatellite,
-        "Google Calles": googleNormal
+        "Google Cyber": googleCyber,
+        "Satélite": googleSatellite,
+        "Calles": googleNormal
       }, null, { position: 'topright' }).addTo(map);
 
       markersGroup = L.layerGroup().addTo(map);
@@ -226,21 +257,16 @@
     }
 
     function cerrarSesion() {
-      // 1. Eliminar datos guardados de la sesión
       sessionStorage.removeItem('geo_user');
       sessionStorage.removeItem('geo_pass');
 
-      // 2. Limpiar las cajas de texto del formulario
       document.getElementById('userInput').value = '';
       document.getElementById('passInput').value = '';
-
-      // 3. Ocultar mensaje de error si existía
       document.getElementById('loginError').style.display = 'none';
 
-      // 4. Mostrar overlay de login y reiniciar vista
       document.getElementById('loginOverlay').style.display = 'flex';
       document.getElementById('sysStatus').textContent = "BLOQUEADO";
-  
+      
       registrosData = [];
       renderizarLista();
       if (markersGroup) markersGroup.clearLayers();
@@ -266,7 +292,6 @@
           if (res.status === 'success') {
             document.getElementById('loginOverlay').style.display = 'none';
             
-            // Forzar recálculo de dimensiones del mapa tras ocultar el login
             setTimeout(() => {
               if (map) map.invalidateSize();
             }, 200);
