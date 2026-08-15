@@ -43,6 +43,7 @@
       <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
       <button class="btn" onclick="document.getElementById('cameraInput').click()">📷 Tomar Foto</button>
       <img id="previewImg" alt="Vista previa">
+      <div id="imgCompressStatus" style="font-size:0.75rem; color:#38bdf8; margin-top:4px;"></div>
     </div>
 
     <!-- GPS -->
@@ -51,10 +52,10 @@
       <div id="gpsStatus" style="font-size:0.9rem; color:#94a3b8;">Obteniendo ubicación...</div>
     </div>
 
-     <!-- Cuadro de Log de Diagnóstico -->
-      <div id="debugLog" style="background:#0f172a; color:#38bdf8; font-family:monospace; font-size:11px; padding:10px; border-radius:6px; max-height:120px; overflow-y:auto; margin-bottom:10px; text-align:left;">
-        > Estado: Esperando acción...
-      </div>
+    <!-- Log Diagnóstico -->
+    <div id="debugLog" style="background:#0f172a; color:#38bdf8; font-family:monospace; font-size:11px; padding:10px; border-radius:6px; max-height:120px; overflow-y:auto; margin-bottom:10px; text-align:left;">
+      > Estado: Esperando acción...
+    </div>
 
     <!-- Enviar / Guardar -->
     <button class="btn btn-success" id="btnSave" onclick="guardarRegistro()">💾 Registrar Ubicación</button>
@@ -65,21 +66,18 @@
   </div>
 
 <script>
-    // CONFIGURACIÓN: Reemplaza con la URL de tu Webhook de n8n o tu Aplicación Web de Apps Script
     const URL_BACKEND = "https://script.google.com/macros/s/AKfycbzB5KNr4-YSPDfqbVIbR4joN9Vw5gzpRXfpVAEdXjPJ_DT-x6l7P3ovJeeUCSMsrEyS/exec";
 
     let fotoBase64 = "";
     let coordsActuales = null;
     let db;
 
-    // Registrar Service Worker para PWA / Carga Offline
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
         .then(() => console.log("Service Worker Activo"))
         .catch(err => console.error("Error SW:", err));
     }
 
-    // Inicializar IndexedDB para guardado local
     const request = indexedDB.open("GeolocalizadorDB", 1);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
@@ -90,12 +88,9 @@
     request.onsuccess = (e) => {
       db = e.target.result;
       actualizarContadorOffline();
-      if (navigator.onLine) {
-        sincronizarPendientes();
-      }
+      if (navigator.onLine) sincronizarPendientes();
     };
 
-    // Control de Estado de Red
     function updateOnlineStatus() {
       const netStatus = document.getElementById('netStatus');
       if (navigator.onLine) {
@@ -111,22 +106,48 @@
     window.addEventListener('offline', updateOnlineStatus);
     updateOnlineStatus();
 
-    // Captura de Foto en Base64
+    // Compresión y optimización de fotos en cliente
     document.getElementById('cameraInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
       reader.onload = function(evt) {
-        fotoBase64 = evt.target.result;
-        const img = document.getElementById('previewImg');
-        img.src = fotoBase64;
-        img.style.display = 'block';
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxDim = 1280;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxDim) { height *= maxDim / width; width = maxDim; }
+          } else {
+            if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Calidad JPEG al 70%
+          fotoBase64 = canvas.toDataURL('image/jpeg', 0.70);
+
+          const prev = document.getElementById('previewImg');
+          prev.src = fotoBase64;
+          prev.style.display = 'block';
+
+          const originalKB = (file.size / 1024).toFixed(0);
+          const compressedKB = (fotoBase64.length * 0.75 / 1024).toFixed(0);
+          document.getElementById('imgCompressStatus').textContent = 
+            `Imagen optimizada: ${originalKB}KB ➔ ${compressedKB}KB`;
+        };
+        img.src = evt.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    // Obtener GPS continuo
     if (navigator.geolocation) {
       navigator.geolocation.watchPosition(
         (pos) => {
@@ -142,13 +163,12 @@
           `;
         },
         (err) => {
-          document.getElementById('gpsStatus').textContent = "Error al obtener GPS: " + err.message;
+          document.getElementById('gpsStatus').textContent = "Error GPS: " + err.message;
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
      
-    // Guardar o Enviar Registro
     function guardarRegistro() {
       if (!coordsActuales) {
         alert("Aún no se ha obtenido la ubicación GPS.");
@@ -191,94 +211,79 @@
       };
     }
 
-function logDebug(msg) {
-  const logDiv = document.getElementById('debugLog');
-  if (logDiv) {
-    logDiv.innerHTML += "<br>> " + msg;
-    logDiv.scrollTop = logDiv.scrollHeight;
-  }
-  console.log(msg);
-}
-
-function enviarAlServidor(registro, esSincronizacion = false) {
-  logDebug("Iniciando envío a: " + URL_BACKEND.substring(0, 30) + "...");
-
-  const formData = new URLSearchParams();
-  formData.append("id", registro.id || ('REG-' + Date.now()));
-  formData.append("timestamp_captura", registro.timestamp_captura || '');
-  formData.append("latitud", registro.latitud || 0);
-  formData.append("longitud", registro.longitud || 0);
-  formData.append("precision_m", registro.precision_m || 0);
-  formData.append("foto_base64", registro.foto_base64 || '');
-
-  fetch(URL_BACKEND, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: formData.toString()
-  })
-  .then(() => {
-    logDebug("¡Petición HTTP enviada con éxito desde el navegador!");
-    if (esSincronizacion) {
-      eliminarDeIndexedDB(registro.id);
-    } else {
-      alert("¡Registro enviado con éxito!");
-      limpiarFormulario();
+    function logDebug(msg) {
+      const logDiv = document.getElementById('debugLog');
+      if (logDiv) {
+        logDiv.innerHTML += "<br>> " + msg;
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+      console.log(msg);
     }
-  })
-  .catch((err) => {
-    logDebug("ERROR FETCH: " + err.message);
-    if (!esSincronizacion) {
-      guardarEnIndexedDB(registro);
+
+    function enviarAlServidor(registro, esSincronizacion = false) {
+      logDebug("Enviando registro: " + registro.id);
+
+      const formData = new URLSearchParams();
+      formData.append("id", registro.id || ('REG-' + Date.now()));
+      formData.append("timestamp_captura", registro.timestamp_captura || '');
+      formData.append("latitud", registro.latitud || 0);
+      formData.append("longitud", registro.longitud || 0);
+      formData.append("precision_m", registro.precision_m || 0);
+      formData.append("foto_base64", registro.foto_base64 || '');
+
+      fetch(URL_BACKEND, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString()
+      })
+      .then(() => {
+        logDebug("¡Petición enviada con éxito!");
+        if (esSincronizacion) {
+          eliminarDeIndexedDB(registro.id);
+        } else {
+          alert("¡Registro enviado con éxito!");
+          limpiarFormulario();
+        }
+      })
+      .catch((err) => {
+        logDebug("ERROR FETCH: " + err.message);
+        if (!esSincronizacion) guardarEnIndexedDB(registro);
+      });
     }
-  });
-}
 
     function eliminarDeIndexedDB(id) {
       if (!db) return;
       const tx = db.transaction(["registros"], "readwrite");
-      const store = tx.objectStore("registros");
-      store.delete(id);
-      tx.oncomplete = () => {
-        actualizarContadorOffline();
-      };
+      tx.objectStore("registros").delete(id);
+      tx.oncomplete = () => actualizarContadorOffline();
     }
 
     function limpiarFormulario() {
       fotoBase64 = "";
       document.getElementById('previewImg').style.display = 'none';
       document.getElementById('cameraInput').value = "";
+      document.getElementById('imgCompressStatus').textContent = "";
     }
 
     function actualizarContadorOffline() {
       if (!db) return;
       const tx = db.transaction(["registros"], "readonly");
-      const store = tx.objectStore("registros");
-      const countReq = store.count();
+      const countReq = tx.objectStore("registros").count();
       countReq.onsuccess = () => {
         document.getElementById('offlineCount').textContent = countReq.result;
       };
     }
 
-    // Función de Sincronización Automática
     function sincronizarPendientes() {
       if (!db || !navigator.onLine || !URL_BACKEND || URL_BACKEND.includes("AQUI_TU")) return;
-
       const tx = db.transaction(["registros"], "readonly");
-      const store = tx.objectStore("registros");
-      const getAllReq = store.getAll();
-
+      const getAllReq = tx.objectStore("registros").getAll();
       getAllReq.onsuccess = () => {
         const pendientes = getAllReq.result;
         if (!pendientes || pendientes.length === 0) return;
-
-        // Procesa el envío de cada registro acumulado en segundo plano
         pendientes.forEach((reg, index) => {
-          setTimeout(() => {
-            enviarAlServidor(reg, true);
-          }, index * 500); // Espaciado de 500ms entre envíos para evitar saturar
+          setTimeout(() => enviarAlServidor(reg, true), index * 500);
         });
       };
     }
