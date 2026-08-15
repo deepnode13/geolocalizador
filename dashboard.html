@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard de Control - Geolocalización</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS para el Mapa -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-800 p-6 rounded-xl border border-slate-700">
+      <div>
+        <h1 class="text-2xl font-bold text-sky-400">Panel de Control de Registros</h1>
+        <p class="text-slate-400 text-sm">Visualización en tiempo real de ubicaciones y capturas</p>
+      </div>
+      <button onclick="cargarDatos()" class="bg-sky-500 hover:bg-sky-600 text-white font-medium px-4 py-2 rounded-lg transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        Actualizar Datos
+      </button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <span class="text-slate-400 text-sm">Total Registros</span>
+        <div id="kpiTotal" class="text-3xl font-bold text-white mt-1">0</div>
+      </div>
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <span class="text-slate-400 text-sm">Con Fotografía</span>
+        <div id="kpiFotos" class="text-3xl font-bold text-emerald-400 mt-1">0</div>
+      </div>
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <span class="text-slate-400 text-sm">Estatus Conexión</span>
+        <div class="text-lg font-bold text-sky-400 mt-2 flex items-center gap-2">
+          <span class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span> Sincronizado
+        </div>
+      </div>
+    </div>
+
+    <!-- Mapa & Lista -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- Mapa -->
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col">
+        <h2 class="text-lg font-semibold mb-3 text-slate-200">Ubicaciones Registradas</h2>
+        <div id="mapa" class="w-full h-80 lg:h-full rounded-lg min-h-[350px]"></div>
+      </div>
+
+      <!-- Tabla de Registros -->
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col">
+        <h2 class="text-lg font-semibold mb-3 text-slate-200">Últimos Capturas</h2>
+        <div class="overflow-x-auto max-h-[380px] overflow-y-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="text-xs text-slate-400 uppercase bg-slate-700/50 sticky top-0">
+              <tr>
+                <th class="p-3">ID / Hora</th>
+                <th class="p-3">Coordenadas</th>
+                <th class="p-3">Foto</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCuerpo" class="divide-y divide-slate-700">
+              <tr>
+                <td colspan="3" class="p-4 text-center text-slate-500">Cargando registros...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // REEMPLAZA CON LA URL DE TU WEB APP APPS SCRIPT
+    const URL_API = "TU_URL_DE_APPS_SCRIPT_AQUI?api=true"; 
+
+    let map;
+    let markersLayer = L.layerGroup();
+
+    function initMap() {
+      // Coordenadas iniciales por defecto
+      map = L.map('mapa').setView([20.659, -103.349], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      markersLayer.addTo(map);
+    }
+
+    async function cargarDatos() {
+      try {
+        const res = await fetch(URL_API);
+        const data = await res.json();
+
+        if (data.error) {
+          alert("Error: " + data.error);
+          return;
+        }
+
+        // Actualizar KPIs
+        document.getElementById('kpiTotal').innerText = data.resumen.total_registros || 0;
+        document.getElementById('kpiFotos').innerText = data.resumen.registros_con_foto || 0;
+
+        // Limpiar mapa y tabla
+        markersLayer.clearLayers();
+        const tbody = document.getElementById('tablaCuerpo');
+        tbody.innerHTML = '';
+
+        if (!data.registros || data.registros.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-500">No hay datos aún.</td></tr>';
+          return;
+        }
+
+        const bounds = [];
+
+        data.registros.forEach(reg => {
+          // Agregar a la Tabla
+          const tr = document.createElement('tr');
+          tr.className = "hover:bg-slate-700/30 transition";
+          
+          const fotoHtml = reg.url_foto && reg.url_foto.startsWith('http') 
+            ? `<a href="${reg.url_foto}" target="_blank" class="text-sky-400 underline hover:text-sky-300">Ver Foto</a>`
+            : `<span class="text-slate-500">Sin Foto</span>`;
+
+          tr.innerHTML = `
+            <td class="p-3">
+              <div class="font-medium text-white">${reg.id}</div>
+              <div class="text-xs text-slate-400">${new Date(reg.timestamp_captura).toLocaleString()}</div>
+            </td>
+            <td class="p-3 font-mono text-xs text-slate-300">
+              ${Number(reg.latitud).toFixed(4)}, ${Number(reg.longitud).toFixed(4)}
+              <div class="text-[10px] text-slate-500">±${reg.precision}m</div>
+            </td>
+            <td class="p-3">${fotoHtml}</td>
+          `;
+          tbody.appendChild(tr);
+
+          // Agregar Pin al Mapa si tiene coordenadas válidas
+          if (reg.latitud && reg.longitud && reg.latitud !== 0) {
+            const lat = parseFloat(reg.latitud);
+            const lng = parseFloat(reg.longitud);
+            bounds.push([lat, lng]);
+
+            const marker = L.marker([lat, lng])
+              .bindPopup(`<b>${reg.id}</b><br>${new Date(reg.timestamp_captura).toLocaleTimeString()}<br>${fotoHtml}`);
+            markersLayer.addLayer(marker);
+          }
+        });
+
+        // Ajustar el zoom del mapa para encuadrar todos los pines
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [20, 20] });
+        }
+
+      } catch (err) {
+        console.error("Error al cargar datos:", err);
+      }
+    }
+
+    window.onload = () => {
+      initMap();
+      cargarDatos();
+    };
+  </script>
+</body>
+</html>
