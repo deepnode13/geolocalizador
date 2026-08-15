@@ -226,10 +226,21 @@
     }
 
     function cerrarSesion() {
+      // 1. Eliminar datos guardados de la sesión
       sessionStorage.removeItem('geo_user');
       sessionStorage.removeItem('geo_pass');
+
+      // 2. Limpiar las cajas de texto del formulario
+      document.getElementById('userInput').value = '';
+      document.getElementById('passInput').value = '';
+
+      // 3. Ocultar mensaje de error si existía
+      document.getElementById('loginError').style.display = 'none';
+
+      // 4. Mostrar overlay de login y reiniciar vista
       document.getElementById('loginOverlay').style.display = 'flex';
       document.getElementById('sysStatus').textContent = "BLOQUEADO";
+  
       registrosData = [];
       renderizarLista();
       if (markersGroup) markersGroup.clearLayers();
