@@ -220,41 +220,54 @@
       if (markersGroup) markersGroup.clearLayers();
     }
 
-    function cargarDatos() {
-      const user = sessionStorage.getItem('geo_user');
-      const pass = sessionStorage.getItem('geo_pass');
+  function cargarDatos() {
+  const user = sessionStorage.getItem('geo_user');
+  const pass = sessionStorage.getItem('geo_pass');
 
-      if (!user || !pass) {
+  if (!user || !pass) {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    return;
+  }
+
+  document.getElementById('sysStatus').textContent = "AUTENTICANDO...";
+  document.getElementById('loginError').style.display = 'none';
+
+  const fetchUrl = `${URL_BACKEND}?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`;
+
+  fetch(fetchUrl)
+    .then(res => res.json())
+    .then(res => {
+      if (res.status === 'success') {
+        document.getElementById('loginOverlay').style.display = 'none';
+        
+        // RECALCULAR TAMAÑO DEL MAPA TRAS QUITAR EL OVERLAY DE LOGIN
+        setTimeout(() => {
+          if (map) map.invalidateSize();
+        }, 200);
+
+        document.getElementById('sysStatus').textContent = "ONLINE";
+        registrosData = res.data;
+        document.getElementById('totalCount').textContent = registrosData.length;
+        renderizarLista();
+        renderizarMapa();
+      } else {
         document.getElementById('loginOverlay').style.display = 'flex';
-        return;
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('sysStatus').textContent = "DENEGADO";
       }
-
-      document.getElementById('sysStatus').textContent = "AUTENTICANDO...";
-      document.getElementById('loginError').style.display = 'none';
-
-      const fetchUrl = `${URL_BACKEND}?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`;
-
-      fetch(fetchUrl)
-        .then(res => res.json())
-        .then(res => {
-          if (res.status === 'success') {
-            document.getElementById('loginOverlay').style.display = 'none';
-            document.getElementById('sysStatus').textContent = "ONLINE";
-            registrosData = res.data;
-            document.getElementById('totalCount').textContent = registrosData.length;
-            renderizarLista();
-            renderizarMapa();
-          } else {
-            document.getElementById('loginOverlay').style.display = 'flex';
-            document.getElementById('loginError').style.display = 'block';
-            document.getElementById('sysStatus').textContent = "DENEGADO";
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          document.getElementById('sysStatus').textContent = "ERROR_CONEXION";
-        });
-    }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('sysStatus').textContent = "ERROR_CONEXION";
+    });
+  }
+  function tieneFoto(reg) {
+    if (!reg) return false;
+    const url = (reg.url_foto || '').toString().trim();
+    const idDrive = (reg.id_foto_drive || '').toString().trim();
+  
+    return (url.length > 10 && url !== 'undefined') || (idDrive.length > 5 && idDrive !== 'undefined');
+  }
 
     function normalizarCoordenada(val) {
       if (typeof val === 'number') return val;
@@ -263,29 +276,31 @@
       return parseFloat(str);
     }
 
-    function renderizarLista() {
-      const listDiv = document.getElementById('recordsList');
-      listDiv.innerHTML = "";
+ function renderizarLista() {
+  const listDiv = document.getElementById('recordsList');
+  listDiv.innerHTML = "";
 
-      registrosData.slice().reverse().forEach((reg, indexOriginal) => {
-        const index = registrosData.length - 1 - indexOriginal;
-        const lat = normalizarCoordenada(reg.latitud);
-        const lng = normalizarCoordenada(reg.longitud);
+  registrosData.slice().reverse().forEach((reg, indexOriginal) => {
+    const index = registrosData.length - 1 - indexOriginal;
+    const lat = normalizarCoordenada(reg.latitud);
+    const lng = normalizarCoordenada(reg.longitud);
 
-        const card = document.createElement('div');
-        card.className = "record-card";
-        card.id = `card-${index}`;
-        card.onclick = () => seleccionarRegistro(index);
+    const conFoto = tieneFoto(reg);
 
-        card.innerHTML = `
-          <div class="record-id">${reg.id}</div>
-          <div class="record-time">⏱ ${reg.timestamp_captura || 'Sin fecha'}</div>
-          <div class="record-coords">📍 Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}</div>
-          ${reg.url_foto ? '<span style="font-size:0.7rem; color:#00ff66;">📷 Con fotografía</span>' : ''}
-        `;
-        listDiv.appendChild(card);
-      });
-    }
+    const card = document.createElement('div');
+    card.className = "record-card";
+    card.id = `card-${index}`;
+    card.onclick = () => seleccionarRegistro(index);
+
+    card.innerHTML = `
+      <div class="record-id">${reg.id}</div>
+      <div class="record-time">⏱ ${reg.timestamp_captura || 'Sin fecha'}</div>
+      <div class="record-coords">📍 Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}</div>
+      ${conFoto ? '<span style="font-size:0.7rem; color:#00ff66;">📷 Con fotografía</span>' : '<span style="font-size:0.7rem; color:var(--text-muted);">🚫 Sin fotografía</span>'}
+    `;
+    listDiv.appendChild(card);
+  });
+}
 
     function renderizarMapa() {
       markersGroup.clearLayers();
@@ -312,32 +327,40 @@
       }
     }
 
-    function seleccionarRegistro(index) {
-      document.querySelectorAll('.record-card').forEach(c => c.classList.remove('active'));
-      const activeCard = document.getElementById(`card-${index}`);
-      if (activeCard) activeCard.classList.add('active');
+ function seleccionarRegistro(index) {
+  document.querySelectorAll('.record-card').forEach(c => c.classList.remove('active'));
+  const activeCard = document.getElementById(`card-${index}`);
+  if (activeCard) activeCard.classList.add('active');
 
-      const reg = registrosData[index];
-      const lat = normalizarCoordenada(reg.latitud);
-      const lng = normalizarCoordenada(reg.longitud);
+  const reg = registrosData[index];
+  const lat = normalizarCoordenada(reg.latitud);
+  const lng = normalizarCoordenada(reg.longitud);
 
-      if (!isNaN(lat) && !isNaN(lng)) {
-        map.flyTo([lat, lng], 16, { duration: 1 });
-      }
+  if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
+    map.flyTo([lat, lng], 16, { duration: 1 });
+  }
 
-      const photoPanel = document.getElementById('photoPanel');
-      if (reg.id_foto_drive || reg.url_foto) {
-        const fileId = reg.id_foto_drive || (reg.url_foto.match(/\/d\/([^\/]+)/) || [])[1];
-        if (fileId) {
-          document.getElementById('photoImg').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
-          document.getElementById('photoLink').href = reg.url_foto || `https://drive.google.com/file/d/${fileId}/view`;
-          document.getElementById('photoTitle').textContent = `FOTO // ${reg.id}`;
-          photoPanel.style.display = 'block';
-        }
-      } else {
-        photoPanel.style.display = 'none';
-      }
+  const photoPanel = document.getElementById('photoPanel');
+
+  if (tieneFoto(reg)) {
+    let fileId = (reg.id_foto_drive || '').toString().trim();
+    if (!fileId && reg.url_foto) {
+      const match = reg.url_foto.match(/\/d\/([^\/]+)/);
+      if (match) fileId = match[1];
     }
+
+    if (fileId) {
+      document.getElementById('photoImg').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+      document.getElementById('photoLink').href = reg.url_foto || `https://drive.google.com/file/d/${fileId}/view`;
+      document.getElementById('photoTitle').textContent = `FOTO // ${reg.id}`;
+      photoPanel.style.display = 'block';
+    } else {
+      photoPanel.style.display = 'none';
+    }
+  } else {
+    photoPanel.style.display = 'none';
+  }
+}
 
     function cerrarFoto() {
       document.getElementById('photoPanel').style.display = 'none';
