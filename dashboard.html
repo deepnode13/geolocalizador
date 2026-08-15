@@ -3,292 +3,268 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DEEPNODE // CYBER_DASHBOARD_v2.0</title>
+  <title>CYBER-MAP // GEO DASHBOARD</title>
   
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts: JetBrains Mono -->
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <!-- Leaflet CSS & JS -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+  
   <style>
+    :root {
+      --bg: #050b14;
+      --card: #0a1728;
+      --accent: #00ff66;
+      --accent-dim: #00aa44;
+      --text: #00ffcc;
+      --text-muted: #338877;
+      --border: #00ff6644;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: 'JetBrains Mono', monospace;
-      background-color: #050811;
-      color: #00ff66;
+      margin: 0; padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      display: flex; flex-direction: column; height: 100vh; overflow: hidden;
     }
-    /* Tiles de mapa en modo ultra-oscuro / hacker */
-    .dark-tiles {
-      filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
+    header {
+      background: var(--card);
+      border-bottom: 2px solid var(--accent);
+      padding: 0.75rem 1.5rem;
+      display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
     }
-    .glow-green {
-      text-shadow: 0 0 10px rgba(0, 255, 102, 0.6);
+    h1 { margin: 0; font-size: 1.2rem; letter-spacing: 2px; text-shadow: 0 0 8px var(--accent); }
+    .status-panel { font-size: 0.8rem; color: var(--accent); }
+    
+    .main-container {
+      display: flex; flex: 1; height: calc(100vh - 60px); overflow: hidden;
     }
-    .glow-box {
-      box-shadow: 0 0 15px rgba(0, 255, 102, 0.15);
-      border: 1px solid rgba(0, 255, 102, 0.3);
+    
+    /* Panel Izquierdo: Lista */
+    .sidebar {
+      width: 380px; background: var(--card);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
     }
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
+    .sidebar-header {
+      padding: 1rem; border-bottom: 1px solid var(--border);
+      background: rgba(0,255,102,0.05);
+      display: flex; justify-content: space-between; align-items: center;
     }
-    ::-webkit-scrollbar-track {
-      background: #090d16;
+    .record-card {
+      padding: 0.85rem 1rem; border-bottom: 1px solid #00ff6611;
+      cursor: pointer; transition: all 0.2s;
     }
-    ::-webkit-scrollbar-thumb {
-      background: #00ff66;
-      border-radius: 2px;
+    .record-card:hover, .record-card.active {
+      background: rgba(0, 255, 102, 0.15);
+      border-left: 4px solid var(--accent);
+    }
+    .record-id { font-weight: bold; color: var(--accent); font-size: 0.9rem; }
+    .record-time { font-size: 0.75rem; color: var(--text-muted); }
+    .record-coords { font-size: 0.8rem; margin-top: 4px; color: #aaffdd; }
+
+    /* Contenido Principal: Mapa + Preview */
+    .content-area {
+      flex: 1; display: flex; flex-direction: column; position: relative;
+    }
+    #map { flex: 1; width: 100%; height: 100%; background: #000; }
+
+    /* Modal / Panel Flotante de Foto */
+    .photo-panel {
+      position: absolute; top: 15px; right: 15px; z-index: 1000;
+      width: 320px; background: rgba(10, 23, 40, 0.92);
+      border: 1px solid var(--accent);
+      border-radius: 8px; padding: 10px;
+      backdrop-filter: blur(5px);
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      display: none;
+    }
+    .photo-panel img {
+      width: 100%; height: 200px; object-fit: cover;
+      border-radius: 4px; border: 1px solid var(--border);
+    }
+    .btn-refresh {
+      background: transparent; border: 1px solid var(--accent);
+      color: var(--accent); padding: 4px 10px; cursor: pointer;
+      font-family: inherit; font-size: 0.8rem; transition: 0.2s;
+    }
+    .btn-refresh:hover { background: var(--accent); color: var(--bg); }
+
+    @media (max-width: 768px) {
+      .main-container { flex-direction: column-reverse; }
+      .sidebar { width: 100%; height: 40%; }
+      .content-area { height: 60%; }
+      .photo-panel { width: 220px; top: 5px; right: 5px; }
+      .photo-panel img { height: 120px; }
     }
   </style>
 </head>
-<body class="min-h-screen p-4 md:p-6 flex flex-col justify-between">
+<body>
 
-  <!-- CAPA MODAL PARA VER FOTOS SIN SALIR -->
-  <div id="modalFoto" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
-    <div class="bg-slate-950 border border-emerald-500 rounded-lg max-w-2xl w-full p-4 relative glow-box">
-      <button onclick="cerrarModal()" class="absolute top-2 right-3 text-emerald-400 hover:text-white text-xl font-bold">[X] CERRAR</button>
-      <div id="modalTitle" class="text-xs text-emerald-400 mb-2">// CAPTURA_TARGET_ID: ---</div>
-      <div class="w-full h-96 bg-black flex items-center justify-center border border-emerald-900 overflow-hidden">
-        <img id="imgModal" src="" alt="Target Capture" class="max-h-full max-w-full object-contain">
+  <header>
+    <h1>[SYS://GEO_TRACKER_V1]</h1>
+    <div class="status-panel">
+      STATUS: <span id="sysStatus">CONECTANDO...</span>
+      <button class="btn-refresh" onclick="cargarDatos()" style="margin-left: 10px;">↻ REFRESH</button>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <!-- Lista de registros -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>REGISTROS EN BASE DE DATOS</span>
+        <b id="totalCount" style="color:var(--accent);">0</b>
       </div>
-      <div class="mt-3 flex justify-between items-center text-xs text-slate-400">
-        <span id="modalMeta">// STATUS: ENCRYPTED_MEDIA_LOADED</span>
-        <a id="btnDescargar" href="#" target="_blank" class="bg-emerald-600/20 hover:bg-emerald-500/40 text-emerald-300 border border-emerald-500/50 px-3 py-1 rounded transition">Abris en pestaña original ↗</a>
+      <div id="recordsList"></div>
+    </div>
+
+    <!-- Mapa e Inspector de Foto -->
+    <div class="content-area">
+      <div id="map"></div>
+
+      <div class="photo-panel" id="photoPanel">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+          <span style="font-size:0.8rem; color:var(--accent);" id="photoTitle">FOTO CAPTURADA</span>
+          <span style="cursor:pointer; color:var(--accent);" onclick="cerrarFoto()">[X]</span>
+        </div>
+        <img id="photoImg" src="" alt="Vista previa de campo">
+        <a id="photoLink" href="#" target="_blank" style="display:block; font-size:0.75rem; color:var(--accent); margin-top:6px; text-decoration:none;">↗ Abrir en Google Drive</a>
       </div>
     </div>
   </div>
 
-  <div class="max-w-7xl mx-auto w-full space-y-4">
-    
-    <!-- HEADER HACKER -->
-    <div class="bg-slate-950/80 p-4 rounded-lg border border-emerald-500/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 glow-box">
-      <div>
-        <div class="text-xs text-emerald-500 font-bold tracking-widest">// SYSTEM OVERVIEW</div>
-        <h1 class="text-2xl font-extrabold text-white tracking-tight glow-green flex items-center gap-2">
-          DEEPNODE <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500 px-2 py-0.5 rounded">v2.0_LIVE</span>
-        </h1>
-      </div>
-      <div class="flex items-center gap-3">
-        <button onclick="cargarDatos()" class="bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500 font-semibold px-4 py-2 rounded text-xs tracking-wider transition active:scale-95 flex items-center gap-2">
-          <span class="inline-block w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span> RE-SCAN DATABASE
-        </button>
-      </div>
-    </div>
-
-    <!-- METRICAS KPI -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div class="bg-slate-950/80 p-4 rounded-lg border border-emerald-500/30 glow-box">
-        <span class="text-xs text-slate-400 font-mono">// TOTAL_NODES</span>
-        <div id="kpiTotal" class="text-3xl font-extrabold text-white mt-1 font-mono">0</div>
-      </div>
-      <div class="bg-slate-950/80 p-4 rounded-lg border border-emerald-500/30 glow-box">
-        <span class="text-xs text-slate-400 font-mono">// MEDIA_CAPTURES</span>
-        <div id="kpiFotos" class="text-3xl font-extrabold text-emerald-400 mt-1 font-mono">0</div>
-      </div>
-      <div class="bg-slate-950/80 p-4 rounded-lg border border-emerald-500/30 glow-box">
-        <span class="text-xs text-slate-400 font-mono">// UPLINK_STATUS</span>
-        <div class="text-sm font-bold text-emerald-400 mt-2 flex items-center gap-2 font-mono">
-          <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE_LISTENING
-        </div>
-      </div>
-    </div>
-
-    <!-- MAPA & TABLA CONTENEDOR -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      
-      <!-- MAPA HACKER -->
-      <div class="bg-slate-950/80 p-3 rounded-lg border border-emerald-500/30 glow-box flex flex-col">
-        <div class="text-xs text-emerald-400 font-bold mb-2 flex justify-between items-center">
-          <span>// SATELLITE_GEOLOCATION_RADAR</span>
-          <span id="coordsStatus" class="text-[10px] text-slate-500 font-normal">CORRECTING_RAW_DATA</span>
-        </div>
-        <div id="mapa" class="w-full h-[420px] rounded border border-emerald-900/60 z-0"></div>
-      </div>
-
-      <!-- TABLA DE REGISTROS -->
-      <div class="bg-slate-950/80 p-3 rounded-lg border border-emerald-500/30 glow-box flex flex-col">
-        <div class="text-xs text-emerald-400 font-bold mb-2">// INCOMING_LOGS_STREAM</div>
-        <div class="overflow-x-auto max-h-[420px] overflow-y-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="text-[10px] text-emerald-400 uppercase bg-emerald-950/40 border-b border-emerald-800/50 sticky top-0">
-              <tr>
-                <th class="p-2">TARGET_ID / TIMESTAMP</th>
-                <th class="p-2">LAT, LNG (FIXED)</th>
-                <th class="p-2 text-right">MEDIA</th>
-              </tr>
-            </thead>
-            <tbody id="tablaCuerpo" class="divide-y divide-emerald-950/80 font-mono">
-              <tr>
-                <td colspan="3" class="p-4 text-center text-slate-500">// INITIALIZING_SCAN...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-    </div>
-
-  </div>
-
-  <footer class="mt-4 text-center text-[10px] text-slate-600 font-mono">
-    DEEPNODE MONITORING SYSTEM // AUTHORIZED ACCESS ONLY
-  </footer>
-
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const URL_API = "https://script.google.com/macros/s/AKfycbzB5KNr4-YSPDfqbVIbR4joN9Vw5gzpRXfpVAEdXjPJ_DT-x6l7P3ovJeeUCSMsrEyS/exec?api=true";
+    const URL_BACKEND = "https://script.google.com/macros/s/AKfycbzB5KNr4-YSPDfqbVIbR4joN9Vw5gzpRXfpVAEdXjPJ_DT-x6l7P3ovJeeUCSMsrEyS/exec";
 
-    let map;
-    let markersLayer = L.layerGroup();
-
-    // PARSER INTELIGENTE DE COORDENADAS (Corrige números gigantes sin punto)
-    function normalizarCoordenada(valor) {
-      if (!valor || valor === 0) return 0;
-      let str = valor.toString().replace(/[^0-9.-]/g, '');
-      
-      // Si ya tiene un punto decimal razonable (ej: 25.4203)
-      if (str.includes('.')) {
-        let partes = str.split('.');
-        if (partes[0].length <= 3) return parseFloat(str);
-        str = partes.join(''); // Quitar punto mal posicionado si el entero es gigante
-      }
-
-      // Si es negativo (Longitud)
-      let esNegativo = str.startsWith('-');
-      if (esNegativo) str = str.substring(1);
-
-      // Si empieza con latitud de México (20 a 30 aprox)
-      if (str.startsWith('25') || str.startsWith('20') || str.startsWith('21') || str.startsWith('22') || str.startsWith('23') || str.startsWith('24') || str.startsWith('26') || str.startsWith('27')) {
-        let lat = str.substring(0, 2) + '.' + str.substring(2);
-        return parseFloat(esNegativo ? '-' + lat : lat);
-      }
-      
-      // Si es longitud (100 a 115 aprox)
-      if (str.startsWith('101') || str.startsWith('100') || str.startsWith('102') || str.startsWith('103') || str.startsWith('99') || str.startsWith('98')) {
-        let lng = str.substring(0, 3) + '.' + str.substring(3);
-        return parseFloat('-' + lng);
-      }
-
-      // Fallback estándar por defecto
-      let valFloat = parseFloat(str);
-      while (Math.abs(valFloat) > 180) {
-        valFloat = valFloat / 10;
-      }
-      return esNegativo ? -valFloat : valFloat;
-    }
+    let map, markersGroup;
+    let registrosData = [];
 
     function initMap() {
-      // Coordenadas por defecto (Saltillo / MTY region)
-      map = L.map('mapa').setView([25.4269, -101.0003], 11);
-      
-      // Tiles OSCURAS para estilo hacker
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        className: 'dark-tiles',
-        attribution: '© OpenStreetMap'
+      // Inicializar mapa centrado por defecto
+      map = L.map('map').setView([25.4200, -101.0255], 13);
+
+      // Mapa Oscuro (CartoDB Dark Matter)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19
       }).addTo(map);
-      
-      markersLayer.addTo(map);
+
+      markersGroup = L.layerGroup().addTo(map);
     }
 
-    async function cargarDatos() {
-      try {
-        const res = await fetch(URL_API);
-        const data = await res.json();
+    function normalizarCoordenada(val) {
+      if (typeof val === 'number') return val;
+      if (!val) return 0;
+      // Convertir comas regionales a puntos
+      let str = val.toString().replace(',', '.');
+      return parseFloat(str);
+    }
 
-        if (data.error) {
-          alert("ERROR: " + data.error);
-          return;
-        }
-
-        document.getElementById('kpiTotal').innerText = data.resumen.total_registros || 0;
-        document.getElementById('kpiFotos').innerText = data.resumen.registros_con_foto || 0;
-
-        markersLayer.clearLayers();
-        const tbody = document.getElementById('tablaCuerpo');
-        tbody.innerHTML = '';
-
-        if (!data.registros || data.registros.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-600">// NO_LOGS_FOUND</td></tr>';
-          return;
-        }
-
-        const bounds = [];
-
-        data.registros.forEach(reg => {
-          // Normalización de lat/lng
-          const lat = normalizarCoordenada(reg.latitud);
-          const lng = normalizarCoordenada(reg.longitud);
-
-          // Renderizar botón de Foto
-          let fotoHtml = `<span class="text-slate-600">// NO_MEDIA</span>`;
-          if (reg.url_foto && reg.url_foto.startsWith('http')) {
-            fotoHtml = `<button onclick="abrirModal('${reg.url_foto}', '${reg.id}')" class="text-emerald-400 hover:text-white bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded transition">
-              [VIEW_IMAGE]
-            </button>`;
-          }
-
-          const fechaFormateada = reg.timestamp_captura ? new Date(reg.timestamp_captura).toLocaleString() : 'N/A';
-
-          const tr = document.createElement('tr');
-          tr.className = "hover:bg-emerald-950/30 transition text-[11px]";
-          tr.innerHTML = `
-            <td class="p-2">
-              <div class="font-bold text-slate-200">${reg.id}</div>
-              <div class="text-[10px] text-slate-500">${fechaFormateada}</div>
-            </td>
-            <td class="p-2 text-emerald-400/90 font-mono">
-              ${lat.toFixed(5)}, ${lng.toFixed(5)}
-            </td>
-            <td class="p-2 text-right">${fotoHtml}</td>
-          `;
-          tbody.appendChild(tr);
-
-          // Agregar al Mapa si la coordenada es válida
-          if (lat !== 0 && lng !== 0 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-            bounds.push([lat, lng]);
-
-            // Pin personalizado en verde Neón
-            const customIcon = L.divIcon({
-              className: 'custom-div-icon',
-              html: `<div style="background-color:#00ff66; width:12px; height:12px; border-radius:50%; box-shadow:0 0 10px #00ff66; border:2px solid #000;"></div>`,
-              iconSize: [12, 12],
-              iconAnchor: [6, 6]
-            });
-
-            const marker = L.marker([lat, lng], { icon: customIcon })
-              .bindPopup(`
-                <div style="font-family: monospace; font-size: 11px; background: #050811; color: #00ff66; padding: 6px; border-radius: 4px;">
-                  <b>${reg.id}</b><br>
-                  ${fechaFormateada}<br>
-                  LAT: ${lat.toFixed(4)}<br>
-                  LNG: ${lng.toFixed(4)}
-                </div>
-              `);
-            markersLayer.addLayer(marker);
-          }
+    function cargarDatos() {
+      document.getElementById('sysStatus').textContent = "OBTENIENDO_DATOS...";
+      fetch(URL_BACKEND)
+        .then(res => res.json())
+        .then(data => {
+          registrosData = data;
+          document.getElementById('sysStatus').textContent = "ONLINE";
+          document.getElementById('totalCount').textContent = data.length;
+          renderizarLista();
+          renderizarMapa();
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('sysStatus').textContent = "ERROR_CONEXION";
         });
+    }
 
-        if (bounds.length > 0) {
-          map.fitBounds(bounds, { padding: [40, 40] });
+    function renderizarLista() {
+      const listDiv = document.getElementById('recordsList');
+      listDiv.innerHTML = "";
+
+      registrosData.reverse().forEach((reg, index) => {
+        const lat = normalizarCoordenada(reg.latitud);
+        const lng = normalizarCoordenada(reg.longitud);
+
+        const card = document.createElement('div');
+        card.className = "record-card";
+        card.id = `card-${index}`;
+        card.onclick = () => seleccionarRegistro(index);
+
+        card.innerHTML = `
+          <div class="record-id">${reg.id}</div>
+          <div class="record-time">⏱ ${reg.timestamp_captura || 'Sin fecha'}</div>
+          <div class="record-coords">📍 Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}</div>
+          ${reg.url_foto ? '<span style="font-size:0.7rem; color:#00ff66;">📷 Con fotografía</span>' : ''}
+        `;
+        listDiv.appendChild(card);
+      });
+    }
+
+    function renderizarMapa() {
+      markersGroup.clearLayers();
+
+      registrosData.forEach((reg, index) => {
+        const lat = normalizarCoordenada(reg.latitud);
+        const lng = normalizarCoordenada(reg.longitud);
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
+          const marker = L.circleMarker([lat, lng], {
+            radius: 7,
+            fillColor: "#00ff66",
+            color: "#050b14",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
+
+          marker.on('click', () => seleccionarRegistro(index));
+          markersGroup.addLayer(marker);
         }
+      });
 
-      } catch (err) {
-        console.error("Error al sincronizar datos:", err);
+      if (registrosData.length > 0) {
+        const primeraLat = normalizarCoordenada(registrosData[0].latitud);
+        const primeraLng = normalizarCoordenada(registrosData[0].longitud);
+        if (!isNaN(primeraLat)) map.setView([primeraLat, primeraLng], 14);
       }
     }
 
-    // FUNCIONES DEL MODAL DE FOTOGRAFÍA
-    function abrirModal(url, id) {
-      document.getElementById('modalTitle').innerText = "// CAPTURA_TARGET_ID: " + id;
-      document.getElementById('imgModal').src = url;
-      document.getElementById('btnDescargar').href = url;
-      document.getElementById('modalFoto').classList.remove('hidden');
+    function seleccionarRegistro(index) {
+      document.querySelectorAll('.record-card').forEach(c => c.classList.remove('active'));
+      const activeCard = document.getElementById(`card-${index}`);
+      if (activeCard) activeCard.classList.add('active');
+
+      const reg = registrosData[index];
+      const lat = normalizarCoordenada(reg.latitud);
+      const lng = normalizarCoordenada(reg.longitud);
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        map.flyTo([lat, lng], 16, { duration: 1 });
+      }
+
+      // Mostrar foto si existe ID/URL
+      const photoPanel = document.getElementById('photoPanel');
+      if (reg.id_foto_drive || reg.url_foto) {
+        const fileId = reg.id_foto_drive || (reg.url_foto.match(/\/d\/([^\/]+)/) || [])[1];
+        
+        if (fileId) {
+          // Thumbnail directo de Drive
+          document.getElementById('photoImg').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+          document.getElementById('photoLink').href = reg.url_foto || `https://drive.google.com/file/d/${fileId}/view`;
+          document.getElementById('photoTitle').textContent = `FOTO // ${reg.id}`;
+          photoPanel.style.display = 'block';
+        }
+      } else {
+        photoPanel.style.display = 'none';
+      }
     }
 
-    function cerrarModal() {
-      document.getElementById('modalFoto').classList.add('hidden');
-      document.getElementById('imgModal').src = '';
+    function cerrarFoto() {
+      document.getElementById('photoPanel').style.display = 'none';
     }
 
     window.onload = () => {
