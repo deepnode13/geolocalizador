@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CYBER-MAP // GEO DASHBOARD</title>
   
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
   <style>
@@ -17,6 +16,7 @@
       --text: #00ffcc;
       --text-muted: #338877;
       --border: #00ff6644;
+      --danger: #ef4444;
     }
     * { box-sizing: border-box; }
     body {
@@ -26,64 +26,75 @@
       font-family: 'Courier New', Courier, monospace;
       display: flex; flex-direction: column; height: 100vh; overflow: hidden;
     }
+
+    /* Modal / Formulario de Login Cyberpunk */
+    #loginOverlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 11, 20, 0.95);
+      z-index: 9999; display: flex; justify-content: center; align-items: center;
+      backdrop-filter: blur(8px);
+    }
+    .login-box {
+      background: var(--card); border: 2px solid var(--accent);
+      border-radius: 8px; padding: 2rem; width: 340px;
+      box-shadow: 0 0 25px rgba(0, 255, 102, 0.3); text-align: center;
+    }
+    .login-box h2 { font-size: 1.2rem; margin-top: 0; text-shadow: 0 0 10px var(--accent); }
+    .input-field {
+      width: 100%; padding: 0.75rem; margin-bottom: 1rem;
+      background: #02060d; border: 1px solid var(--border);
+      color: var(--accent); font-family: inherit; font-size: 0.9rem;
+      border-radius: 4px; outline: none;
+    }
+    .input-field:focus { border-color: var(--accent); box-shadow: 0 0 8px var(--accent-dim); }
+    .btn-cyber {
+      width: 100%; padding: 0.75rem; background: var(--accent);
+      color: var(--bg); border: none; font-weight: bold;
+      font-family: inherit; font-size: 1rem; cursor: pointer;
+      transition: 0.2s; border-radius: 4px;
+    }
+    .btn-cyber:hover { background: #33ff88; box-shadow: 0 0 15px var(--accent); }
+    #loginError { color: var(--danger); font-size: 0.8rem; margin-top: 0.8rem; display: none; }
+
     header {
-      background: var(--card);
-      border-bottom: 2px solid var(--accent);
-      padding: 0.75rem 1.5rem;
-      display: flex; justify-content: space-between; align-items: center;
+      background: var(--card); border-bottom: 2px solid var(--accent);
+      padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center;
       box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
     }
     h1 { margin: 0; font-size: 1.2rem; letter-spacing: 2px; text-shadow: 0 0 8px var(--accent); }
     .status-panel { font-size: 0.8rem; color: var(--accent); display: flex; align-items: center; gap: 10px; }
     
-    .main-container {
-      display: flex; flex: 1; height: calc(100vh - 60px); overflow: hidden;
-    }
+    .main-container { display: flex; flex: 1; height: calc(100vh - 60px); overflow: hidden; }
     
-    /* Panel Izquierdo: Lista */
     .sidebar {
-      width: 380px; background: var(--card);
-      border-right: 1px solid var(--border);
-      display: flex; flex-direction: column;
-      overflow-y: auto;
+      width: 380px; background: var(--card); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow-y: auto;
     }
     .sidebar-header {
       padding: 1rem; border-bottom: 1px solid var(--border);
-      background: rgba(0,255,102,0.05);
-      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,255,102,0.05); display: flex; justify-content: space-between; align-items: center;
     }
     .record-card {
       padding: 0.85rem 1rem; border-bottom: 1px solid #00ff6611;
       cursor: pointer; transition: all 0.2s;
     }
     .record-card:hover, .record-card.active {
-      background: rgba(0, 255, 102, 0.15);
-      border-left: 4px solid var(--accent);
+      background: rgba(0, 255, 102, 0.15); border-left: 4px solid var(--accent);
     }
     .record-id { font-weight: bold; color: var(--accent); font-size: 0.9rem; }
     .record-time { font-size: 0.75rem; color: var(--text-muted); }
     .record-coords { font-size: 0.8rem; margin-top: 4px; color: #aaffdd; }
 
-    /* Contenido Principal: Mapa + Preview */
-    .content-area {
-      flex: 1; display: flex; flex-direction: column; position: relative;
-    }
+    .content-area { flex: 1; display: flex; flex-direction: column; position: relative; }
     #map { flex: 1; width: 100%; height: 100%; background: #000; }
 
-    /* Filtro Oscuro / Cyberpunk para la capa de Google Maps */
-    .dark-map-layer {
-      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-    }
+    .dark-map-layer { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
 
-    /* Modal / Panel Flotante de Foto */
     .photo-panel {
       position: absolute; top: 15px; right: 15px; z-index: 1000;
-      width: 320px; background: rgba(10, 23, 40, 0.92);
-      border: 1px solid var(--accent);
-      border-radius: 8px; padding: 10px;
-      backdrop-filter: blur(5px);
-      box-shadow: 0 0 20px rgba(0,0,0,0.8);
-      display: none;
+      width: 320px; background: rgba(10, 23, 40, 0.92); border: 1px solid var(--accent);
+      border-radius: 8px; padding: 10px; backdrop-filter: blur(5px);
+      box-shadow: 0 0 20px rgba(0,0,0,0.8); display: none;
     }
     .photo-panel img {
       width: 100%; height: 200px; object-fit: cover;
@@ -96,15 +107,10 @@
     }
     .btn-refresh:hover { background: var(--accent); color: var(--bg); }
 
-    /* Estilo del Control de Capas de Leaflet */
     .leaflet-control-layers {
-      background: var(--card) !important;
-      color: var(--accent) !important;
-      border: 1px solid var(--accent) !important;
-      font-family: 'Courier New', Courier, monospace !important;
-      box-shadow: 0 0 10px rgba(0, 255, 102, 0.2) !important;
+      background: var(--card) !important; color: var(--accent) !important;
+      border: 1px solid var(--accent) !important; font-family: 'Courier New', Courier, monospace !important;
     }
-    .leaflet-control-layers-list label { margin-bottom: 4px; }
 
     @media (max-width: 768px) {
       .main-container { flex-direction: column-reverse; }
@@ -117,16 +123,28 @@
 </head>
 <body>
 
+  <!-- Overlay de Autenticación -->
+  <div id="loginOverlay">
+    <div class="login-box">
+      <h2>[RESTRICTED ACCESS]</h2>
+      <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:1.5rem;">INGRESE SUS CREDENCIALES</p>
+      <input type="text" id="userInput" class="input-field" placeholder="USUARIO" autocomplete="off">
+      <input type="password" id="passInput" class="input-field" placeholder="CONTRASEÑA">
+      <button class="btn-cyber" onclick="iniciarSesion()">INICIAR SESIÓN</button>
+      <div id="loginError">ACCESO DENEGADO</div>
+    </div>
+  </div>
+
   <header>
     <h1>[SYS://GEO_TRACKER_V1]</h1>
     <div class="status-panel">
-      STATUS: <span id="sysStatus">CONECTANDO...</span>
+      STATUS: <span id="sysStatus">BLOQUEADO</span>
       <button class="btn-refresh" onclick="cargarDatos()">↻ REFRESH</button>
+      <button class="btn-refresh" onclick="cerrarSesion()" style="border-color:var(--danger); color:var(--danger);">[LOGOUT]</button>
     </div>
   </header>
 
   <div class="main-container">
-    <!-- Lista de registros -->
     <div class="sidebar">
       <div class="sidebar-header">
         <span>REGISTROS EN BASE DE DATOS</span>
@@ -135,7 +153,6 @@
       <div id="recordsList"></div>
     </div>
 
-    <!-- Mapa e Inspector de Foto -->
     <div class="content-area">
       <div id="map"></div>
 
@@ -150,7 +167,6 @@
     </div>
   </div>
 
-  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const URL_BACKEND = "https://script.google.com/macros/s/AKfycbzB5KNr4-YSPDfqbVIbR4joN9Vw5gzpRXfpVAEdXjPJ_DT-x6l7P3ovJeeUCSMsrEyS/exec";
@@ -161,39 +177,83 @@
     function initMap() {
       map = L.map('map').setView([25.4200, -101.0255], 13);
 
-      // --- CAPAS DE GOOGLE MAPS ---
-      // 1. Google Maps Cyber / Oscuro
       const googleCyber = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        className: 'dark-map-layer',
-        attribution: '&copy; Google Maps',
-        maxZoom: 20
+        className: 'dark-map-layer', attribution: '&copy; Google Maps', maxZoom: 20
       });
-
-      // 2. Google Maps Satélite
       const googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
-        attribution: '&copy; Google Maps',
-        maxZoom: 20
+        attribution: '&copy; Google Maps', maxZoom: 20
       });
-
-      // 3. Google Maps Normal (Calles)
       const googleNormal = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        attribution: '&copy; Google Maps',
-        maxZoom: 20
+        attribution: '&copy; Google Maps', maxZoom: 20
       });
 
-      // Capa por defecto
       googleCyber.addTo(map);
 
-      // Control de capas
-      const baseMaps = {
+      L.control.layers({
         "Google Cyber (Dark)": googleCyber,
         "Google Satélite": googleSatellite,
         "Google Calles": googleNormal
-      };
-
-      L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+      }, null, { position: 'topright' }).addTo(map);
 
       markersGroup = L.layerGroup().addTo(map);
+    }
+
+    function iniciarSesion() {
+      const u = document.getElementById('userInput').value;
+      const p = document.getElementById('passInput').value;
+      
+      if (!u || !p) return;
+
+      sessionStorage.setItem('geo_user', u);
+      sessionStorage.setItem('geo_pass', p);
+
+      cargarDatos();
+    }
+
+    function cerrarSesion() {
+      sessionStorage.removeItem('geo_user');
+      sessionStorage.removeItem('geo_pass');
+      document.getElementById('loginOverlay').style.display = 'flex';
+      document.getElementById('sysStatus').textContent = "BLOQUEADO";
+      registrosData = [];
+      renderizarLista();
+      if (markersGroup) markersGroup.clearLayers();
+    }
+
+    function cargarDatos() {
+      const user = sessionStorage.getItem('geo_user');
+      const pass = sessionStorage.getItem('geo_pass');
+
+      if (!user || !pass) {
+        document.getElementById('loginOverlay').style.display = 'flex';
+        return;
+      }
+
+      document.getElementById('sysStatus').textContent = "AUTENTICANDO...";
+      document.getElementById('loginError').style.display = 'none';
+
+      const fetchUrl = `${URL_BACKEND}?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`;
+
+      fetch(fetchUrl)
+        .then(res => res.json())
+        .then(res => {
+          if (res.status === 'success') {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('sysStatus').textContent = "ONLINE";
+            registrosData = res.data;
+            document.getElementById('totalCount').textContent = registrosData.length;
+            renderizarLista();
+            renderizarMapa();
+          } else {
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('loginError').style.display = 'block';
+            document.getElementById('sysStatus').textContent = "DENEGADO";
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('sysStatus').textContent = "ERROR_CONEXION";
+        });
     }
 
     function normalizarCoordenada(val) {
@@ -201,23 +261,6 @@
       if (!val) return 0;
       let str = val.toString().replace(',', '.');
       return parseFloat(str);
-    }
-
-    function cargarDatos() {
-      document.getElementById('sysStatus').textContent = "OBTENIENDO_DATOS...";
-      fetch(URL_BACKEND)
-        .then(res => res.json())
-        .then(data => {
-          registrosData = data;
-          document.getElementById('sysStatus').textContent = "ONLINE";
-          document.getElementById('totalCount').textContent = data.length;
-          renderizarLista();
-          renderizarMapa();
-        })
-        .catch(err => {
-          console.error(err);
-          document.getElementById('sysStatus').textContent = "ERROR_CONEXION";
-        });
     }
 
     function renderizarLista() {
@@ -253,12 +296,7 @@
 
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
           const marker = L.circleMarker([lat, lng], {
-            radius: 8,
-            fillColor: "#00ff66",
-            color: "#050b14",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.85
+            radius: 8, fillColor: "#00ff66", color: "#050b14", weight: 2, opacity: 1, fillOpacity: 0.85
           });
 
           marker.on('click', () => seleccionarRegistro(index));
@@ -287,11 +325,9 @@
         map.flyTo([lat, lng], 16, { duration: 1 });
       }
 
-      // Mostrar foto si existe ID/URL
       const photoPanel = document.getElementById('photoPanel');
       if (reg.id_foto_drive || reg.url_foto) {
         const fileId = reg.id_foto_drive || (reg.url_foto.match(/\/d\/([^\/]+)/) || [])[1];
-        
         if (fileId) {
           document.getElementById('photoImg').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
           document.getElementById('photoLink').href = reg.url_foto || `https://drive.google.com/file/d/${fileId}/view`;
