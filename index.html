@@ -186,33 +186,39 @@
       };
     }
 
-    function enviarAlServidor(registro, esSincronizacion = false) {
-      const payload = JSON.stringify(registro);
+   function enviarAlServidor(registro, esSincronizacion = false) {
+  // Convertimos el objeto en formato de formulario URL encoded
+  const formData = new URLSearchParams();
+  formData.append("id", registro.id || ('REG-' + Date.now()));
+  formData.append("timestamp_captura", registro.timestamp_captura || '');
+  formData.append("latitud", registro.latitud || 0);
+  formData.append("longitud", registro.longitud || 0);
+  formData.append("precision_m", registro.precision_m || 0);
+  formData.append("foto_base64", registro.foto_base64 || '');
 
-      // Usamos mode: 'no-cors' para asegurar el envío seguro sin bloqueos de origen cruzado desde GitHub Pages
-      fetch(URL_BACKEND, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: payload
-      })
-      .then(() => {
-        if (esSincronizacion) {
-          eliminarDeIndexedDB(registro.id);
-        } else {
-          alert("¡Registro enviado con éxito!");
-          limpiarFormulario();
-        }
-      })
-      .catch((err) => {
-        console.error("Error al enviar:", err);
-        if (!esSincronizacion) {
-          guardarEnIndexedDB(registro);
-        }
-      });
+  fetch(URL_BACKEND, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: formData.toString()
+  })
+  .then(() => {
+    if (esSincronizacion) {
+      eliminarDeIndexedDB(registro.id);
+    } else {
+      alert("¡Registro enviado con éxito!");
+      limpiarFormulario();
     }
+  })
+  .catch((err) => {
+    console.error("Error al enviar:", err);
+    if (!esSincronizacion) {
+      guardarEnIndexedDB(registro);
+    }
+  });
+}
 
     function eliminarDeIndexedDB(id) {
       if (!db) return;
