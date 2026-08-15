@@ -142,7 +142,10 @@
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
-
+      <!-- Cuadro de Log de Diagnóstico -->
+      <div id="debugLog" style="background:#0f172a; color:#38bdf8; font-family:monospace; font-size:11px; padding:10px; border-radius:6px; max-height:120px; overflow-y:auto; margin-bottom:10px; text-align:left;">
+        > Estado: Esperando acción...
+      </div>
     // Guardar o Enviar Registro
     function guardarRegistro() {
       if (!coordsActuales) {
@@ -186,8 +189,18 @@
       };
     }
 
-   function enviarAlServidor(registro, esSincronizacion = false) {
-  // Convertimos el objeto en formato de formulario URL encoded
+function logDebug(msg) {
+  const logDiv = document.getElementById('debugLog');
+  if (logDiv) {
+    logDiv.innerHTML += "<br>> " + msg;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+  console.log(msg);
+}
+
+function enviarAlServidor(registro, esSincronizacion = false) {
+  logDebug("Iniciando envío a: " + URL_BACKEND.substring(0, 30) + "...");
+
   const formData = new URLSearchParams();
   formData.append("id", registro.id || ('REG-' + Date.now()));
   formData.append("timestamp_captura", registro.timestamp_captura || '');
@@ -205,6 +218,7 @@
     body: formData.toString()
   })
   .then(() => {
+    logDebug("¡Petición HTTP enviada con éxito desde el navegador!");
     if (esSincronizacion) {
       eliminarDeIndexedDB(registro.id);
     } else {
@@ -213,7 +227,7 @@
     }
   })
   .catch((err) => {
-    console.error("Error al enviar:", err);
+    logDebug("ERROR FETCH: " + err.message);
     if (!esSincronizacion) {
       guardarEnIndexedDB(registro);
     }
