@@ -59,8 +59,8 @@
     </div>
   </div>
 
-  <script>
-    // CONFIGURACIÓN: Reemplaza con la URL de tu Webhook de n8n o Apps Script
+<script>
+    // CONFIGURACIÓN: Reemplaza con la URL de tu Webhook de n8n o tu Aplicación Web de Apps Script
     const URL_BACKEND = "https://script.google.com/macros/s/AKfycbzB5KNr4-YSPDfqbVIbR4joN9Vw5gzpRXfpVAEdXjPJ_DT-x6l7P3ovJeeUCSMsrEyS/exec";
 
     let fotoBase64 = "";
@@ -78,11 +78,16 @@
     const request = indexedDB.open("GeolocalizadorDB", 1);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
-      db.createObjectStore("registros", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("registros")) {
+        db.createObjectStore("registros", { keyPath: "id" });
+      }
     };
     request.onsuccess = (e) => {
       db = e.target.result;
       actualizarContadorOffline();
+      if (navigator.onLine) {
+        sincronizarPendientes();
+      }
     };
 
     // Control de Estado de Red
@@ -138,7 +143,7 @@
       );
     }
 
-    // Guardar Registro
+    // Guardar o Enviar Registro
     function guardarRegistro() {
       if (!coordsActuales) {
         alert("Aún no se ha obtenido la ubicación GPS.");
@@ -162,16 +167,18 @@
         foto_base64: fotoBase64
       };
 
-      if (navigator.onLine && URL_BACKEND !== "AQUI_TU_WEBHOOK_N8N_O_APPS_SCRIPT") {
-        enviarAlServidor(nuevoRegistro);
+      if (navigator.onLine && URL_BACKEND && !URL_BACKEND.includes("AQUI_TU")) {
+        enviarAlServidor(nuevoRegistro, false);
       } else {
         guardarEnIndexedDB(nuevoRegistro);
       }
     }
 
     function guardarEnIndexedDB(registro) {
+      if (!db) return;
       const tx = db.transaction(["registros"], "readwrite");
-      tx.objectStore("registros").add(registro);
+      const store = tx.objectStore("registros");
+      store.add(registro);
       tx.oncomplete = () => {
         alert("Registro guardado en el teléfono (Offline)");
         limpiarFormulario();
@@ -179,21 +186,42 @@
       };
     }
 
-    function enviarAlServidor(registro) {
+    function enviarAlServidor(registro, esSincronizacion = false) {
+      const payload = JSON.stringify(registro);
+
+      // Usamos mode: 'no-cors' para asegurar el envío seguro sin bloqueos de origen cruzado desde GitHub Pages
       fetch(URL_BACKEND, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registro)
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: payload
       })
-      .then(res => res.json())
-      .then(data => {
-        alert("¡Registro enviado con éxito!");
-        limpiarFormulario();
+      .then(() => {
+        if (esSincronizacion) {
+          eliminarDeIndexedDB(registro.id);
+        } else {
+          alert("¡Registro enviado con éxito!");
+          limpiarFormulario();
+        }
       })
-      .catch(() => {
-        // Si falla el envío aunque decía online, guardar en IndexedDB
-        guardarEnIndexedDB(registro);
+      .catch((err) => {
+        console.error("Error al enviar:", err);
+        if (!esSincronizacion) {
+          guardarEnIndexedDB(registro);
+        }
       });
+    }
+
+    function eliminarDeIndexedDB(id) {
+      if (!db) return;
+      const tx = db.transaction(["registros"], "readwrite");
+      const store = tx.objectStore("registros");
+      store.delete(id);
+      tx.oncomplete = () => {
+        actualizarContadorOffline();
+      };
     }
 
     function limpiarFormulario() {
@@ -212,28 +240,23 @@
       };
     }
 
+    // Función de Sincronización Automática
     function sincronizarPendientes() {
-      if (!db) return;
+      if (!db || !navigator.onLine || !URL_BACKEND || URL_BACKEND.includes("AQUI_TU")) return;
+
       const tx = db.transaction(["registros"], "readonly");
       const store = tx.objectStore("registros");
       const getAllReq = store.getAll();
 
       getAllReq.onsuccess = () => {
         const pendientes = getAllReq.result;
-        if (pendientes.length === 0) return;
+        if (!pendientes || pendientes.length === 0) return;
 
-        pendientes.forEach(reg => {
-          fetch(URL_BACKEND, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(reg)
-          }).then(res => {
-            if (res.ok) {
-              const delTx = db.transaction(["registros"], "readwrite");
-              delTx.objectStore("registros").delete(reg.id);
-              delTx.oncomplete = () => actualizarContadorOffline();
-            }
-          });
+        // Procesa el envío de cada registro acumulado en segundo plano
+        pendientes.forEach((reg, index) => {
+          setTimeout(() => {
+            enviarAlServidor(reg, true);
+          }, index * 500); // Espaciado de 500ms entre envíos para evitar saturar
         });
       };
     }
